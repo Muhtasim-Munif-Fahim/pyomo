@@ -975,8 +975,18 @@ def _finalize_multiprocessing(module, available):
     # will be updated to a multiprocessing.Lock when the first module
     # triggers the multiprocessing import.
 
+    #
+    # Some environments (e.g., AWS Lambda) do not provide the shared
+    # memory (/dev/shm) needed for POSIX semaphores, and creating a
+    # multiprocessing.Lock raises an OSError (PermissionError) or
+    # ImportError.  As this callback can be triggered by *any* import of
+    # multiprocessing (including by third-party libraries), we must not
+    # fail here: fall back to the existing threading.Lock.
     global capture_output_lock
-    capture_output_lock = module.Lock()
+    try:
+        capture_output_lock = module.Lock()
+    except (OSError, ImportError):
+        pass
 
 
 def _finalize_scipy(module, available):

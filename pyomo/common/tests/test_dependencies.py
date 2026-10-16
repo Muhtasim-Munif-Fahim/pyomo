@@ -528,6 +528,30 @@ class TestDependencies(unittest.TestCase):
         ):
             A_Class.method()
 
+    def test_finalize_multiprocessing_lock_unavailable(self):
+        # Environments without /dev/shm (e.g., AWS Lambda) raise when
+        # creating a multiprocessing.Lock.  Importing multiprocessing
+        # must still succeed, keeping the existing threading.Lock.
+        import pyomo.common.dependencies as deps_mod
+
+        class _NoSemLock:
+            def __init__(self, exc):
+                self.exc = exc
+
+            def Lock(self):
+                raise self.exc
+
+        orig = deps_mod.capture_output_lock
+        try:
+            for exc in (
+                PermissionError(13, 'Permission denied'),
+                ImportError('This platform lacks a functioning sem_open'),
+            ):
+                deps_mod._finalize_multiprocessing(_NoSemLock(exc), True)
+                self.assertIs(deps_mod.capture_output_lock, orig)
+        finally:
+            deps_mod.capture_output_lock = orig
+
     @unittest.pytest.mark.mpi
     def test_mpi4py_available(self):
         from mpi4py import MPI
